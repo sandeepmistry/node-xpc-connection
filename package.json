@@ -14,12 +14,11 @@
   },
   "keywords": [
     "XPC",
-    "XPC connection",
+    "XPC connection"
   ],
   "author": "Sandeep Misty <sandeep.mistry@gmail.com>",
   "license": "MIT",
   "readmeFilename": "README.md",
-  "gitHead": "3509bbf3974f72f352a8bd9839dbd45a0552c6b8",
   "engines": {
     "node": ">=0.8"
   },
