@@ -1,7 +1,7 @@
 {
   "name": "xpc-connection",
   "version": "0.0.1",
-  "description": "node.js binding for Mac OS X XPC connections",
+  "description": "XPC Connection binding for node.js",
   "main": "index.js",
   "scripts": {
   },
@@ -9,12 +9,19 @@
     "type": "git",
     "url": "https://github.com/sandeepmistry/node-xpc-connection.git"
   },
+  "bugs": {
+    "url": "https://github.com/sandeepmistry/node-xpc-connection/issues"
+  },
   "keywords": [
-    "xpc",
-    "xpc connection"
+    "XPC",
+    "XPC connection",
   ],
   "author": "Sandeep Misty <sandeep.mistry@gmail.com>",
   "license": "MIT",
   "readmeFilename": "README.md",
-  "gitHead": "3509bbf3974f72f352a8bd9839dbd45a0552c6b8"
+  "gitHead": "3509bbf3974f72f352a8bd9839dbd45a0552c6b8",
+  "engines": {
+    "node": ">=0.8"
+  },
+  "os": [ "darwin" ]
 }
