@@ -203,9 +203,7 @@ v8::Handle<v8::Object> XpcConnection::XpcDictionaryToObject(xpc_object_t xpcDict
   v8::Handle<v8::Object> object = v8::Object::New();
 
   xpc_dictionary_apply(xpcDictionary, ^bool(const char *key, xpc_object_t value) {
-    v8::Handle<v8::String> keyString = v8::String::New(key);
-
-    object->Set(keyString, XpcConnection::XpcObjectToValue(value));
+    object->Set(v8::String::New(key), XpcConnection::XpcObjectToValue(value));
 
     return true;
   });
