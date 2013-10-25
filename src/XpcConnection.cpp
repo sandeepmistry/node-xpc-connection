@@ -114,7 +114,13 @@ xpc_object_t XpcConnection::ValueToXpcObject(v8::Handle<v8::Value> value) {
   } else if (node::Buffer::HasInstance(value)) {
     v8::Handle<v8::Object> valueObject = value->ToObject();
 
-    xpcObject = xpc_data_create(node::Buffer::Data(valueObject), node::Buffer::Length(valueObject));
+    if (valueObject->HasRealNamedProperty(v8::String::New("isUuid"))) {
+      uuid_t *uuid = (uuid_t *)node::Buffer::Data(valueObject);
+
+      xpcObject = xpc_uuid_create(*uuid);
+    } else {
+      xpcObject = xpc_data_create(node::Buffer::Data(valueObject), node::Buffer::Length(valueObject));
+    }
   } else if (value->IsObject()) {
     v8::Handle<v8::Object> valueObject = value->ToObject();
 
@@ -192,8 +198,21 @@ v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
     };
     
     value = bufferConstructor->NewInstance(3, constructorArgs);
+  } else if(valueType == XPC_TYPE_UUID) {
+    node::Buffer *slowBuffer = node::Buffer::New((char *)xpc_uuid_get_bytes(xpcObject), sizeof(uuid_t));
+
+    v8::Handle<v8::Object> globalObj = v8::Context::GetCurrent()->Global();
+    v8::Handle<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(v8::String::New("Buffer")));
+
+    v8::Handle<v8::Value> constructorArgs[3] = {
+      slowBuffer->handle_,
+      v8::Integer::New(sizeof(uuid_t)),
+      v8::Integer::New(0)
+    };
+    
+    value = bufferConstructor->NewInstance(3, constructorArgs);
   } else {
-    NSLog(@"XpcObjectToValue: Could not convert to value!");
+    NSLog(@"XpcObjectToValue: Could not convert to value!, %@", xpcObject);
   }
 
   return value;
