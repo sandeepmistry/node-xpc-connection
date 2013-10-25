@@ -10,6 +10,7 @@ Supported data types
  * string
  * array
  * buffer
+ * uuid
  * object
 
 Example
