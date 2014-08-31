@@ -64,7 +64,7 @@ void XpcConnection::handleEvent(xpc_object_t event) {
 
   req->data = data;
 
-  uv_queue_work(uv_default_loop(), req, XpcConnection::HandleEvent, XpcConnection::HandleEventAfter);
+  uv_queue_work(uv_default_loop(), req, XpcConnection::HandleEvent, (uv_after_work_cb)XpcConnection::HandleEventAfter);
 }
 
 v8::Handle<v8::Value> XpcConnection::New(const v8::Arguments& args) {
