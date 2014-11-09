@@ -40,3 +40,14 @@ var mesage = {
 xpcConnection.sendMessage(mesage);
 
 ```
+
+Build Errors
+============
+Before creating a new issue for build errors, please set your path to the following:
+
+```
+/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/X11/bin
+```
+
+MacPorts and other similiar tools might be adding an incompatible compiler to your PATH (see issue #2) for more details.
+
