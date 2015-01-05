@@ -8,15 +8,17 @@
 
 #include <dispatch/dispatch.h>
 #include <xpc/xpc.h>
+#include <nan.h>
 
-class XpcConnection : node::ObjectWrap {
+
+class XpcConnection : public node::ObjectWrap {
 
 public:
   static void Init(v8::Handle<v8::Object> target);
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
 
-  static v8::Handle<v8::Value> Setup(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SendMessage(const v8::Arguments& args);
+  static NAN_METHOD(New);
+  static NAN_METHOD(Setup);
+  static NAN_METHOD(SendMessage);
 
 private:
   XpcConnection(std::string serviceName);
@@ -42,7 +44,7 @@ private:
   void handleEvent(xpc_object_t event);
 
 private:
-  std::string serviceName;    
+  std::string serviceName;
   dispatch_queue_t dispatchQueue;
   xpc_connection_t xpcConnnection;
 
