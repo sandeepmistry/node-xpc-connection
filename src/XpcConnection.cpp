@@ -1,4 +1,3 @@
-// 76 errors
 #import <Foundation/Foundation.h>
 
 #include <node_buffer.h>
