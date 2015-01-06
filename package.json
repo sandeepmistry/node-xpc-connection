@@ -1,6 +1,6 @@
 {
   "name": "xpc-connection",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "XPC Connection binding for node.js",
   "main": "index.js",
   "scripts": {
@@ -26,6 +26,5 @@
   "dependencies": {
     "nan": "~1.4.1"
   }
-
 }
 
