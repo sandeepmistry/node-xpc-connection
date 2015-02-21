@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "description": "XPC Connection binding for node.js",
   "main": "index.js",
-  "scripts": {
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/sandeepmistry/node-xpc-connection.git"
@@ -22,9 +21,10 @@
   "engines": {
     "node": ">=0.8"
   },
-  "os": [ "darwin" ],
+  "os": [
+    "darwin"
+  ],
   "dependencies": {
-    "nan": "~1.4.1"
+    "nan": "^1.6.2"
   }
 }
-

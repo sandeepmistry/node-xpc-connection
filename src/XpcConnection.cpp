@@ -185,7 +185,7 @@ v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
   xpc_type_t valueType = xpc_get_type(xpcObject);
 
   if (valueType == XPC_TYPE_INT64) {
-    value = NanNew<Integer>(xpc_int64_get_value(xpcObject));
+    value = NanNew<Integer>((int32_t)xpc_int64_get_value(xpcObject));
   } else if(valueType == XPC_TYPE_STRING) {
     value = NanNew<String>(xpc_string_get_string_ptr(xpcObject));
   } else if(valueType == XPC_TYPE_DICTIONARY) {
@@ -196,12 +196,12 @@ v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
 
 
     Local<Object> slowBuffer = NanNewBufferHandle((char *)xpc_data_get_bytes_ptr(xpcObject), xpc_data_get_length(xpcObject));
-    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global(); //v8::Context::GetCurrent()->Global();
+    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global();
     v8::Handle<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(NanNew<String>("Buffer")));
 
     v8::Handle<v8::Value> constructorArgs[3] = {
       slowBuffer,
-      NanNew<Integer>(xpc_data_get_length(xpcObject)),
+      NanNew<Integer>((int32_t)xpc_data_get_length(xpcObject)),
       NanNew<Integer>(0)
     };
 
@@ -209,12 +209,12 @@ v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
   } else if(valueType == XPC_TYPE_UUID) {
     Local<Object> slowBuffer = NanNewBufferHandle((char *)xpc_uuid_get_bytes(xpcObject), sizeof(uuid_t));
 
-    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global(); //v8::Context::GetCurrent()->Global();
+    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global();
     v8::Handle<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(NanNew<String>("Buffer")));
 
     v8::Handle<v8::Value> constructorArgs[3] = {
       slowBuffer,
-      NanNew<Integer>(sizeof(uuid_t)),
+      NanNew<Integer>((int32_t)sizeof(uuid_t)),
       NanNew<Integer>(0)
     };
 
@@ -287,7 +287,7 @@ void XpcConnection::HandleEventAfter(uv_work_t* req) {
       NanNew<String>("event"),
       eventObject
     };
-    // Same situation as line 297.
+
     NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
   }
 
