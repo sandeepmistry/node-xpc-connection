@@ -4,7 +4,6 @@
 #include <node.h>
 
 #include <string>
-#include <vector>
 
 #include <dispatch/dispatch.h>
 #include <xpc/xpc.h>
@@ -32,12 +31,7 @@ private:
   static v8::Handle<v8::Object> XpcDictionaryToObject(xpc_object_t xpcDictionary);
   static v8::Handle<v8::Array> XpcArrayToArray(xpc_object_t xpcArray);
 
-  static void HandleEvent(uv_work_t* req);
-#if UV_VERSION_MINOR > 8
-  static void HandleEventAfter(uv_work_t* req, int status);
-#else
-  static void HandleEventAfter(uv_work_t* req);
-#endif
+  static void AsyncCallback(uv_async_t* handle);
 
   void setup();
   void sendMessage(xpc_object_t message);
@@ -49,6 +43,8 @@ private:
   xpc_connection_t xpcConnnection;
 
   v8::Persistent<v8::Object> This;
+
+  uv_async_t asyncHandle;
 };
 
 #endif

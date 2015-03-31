@@ -1,3 +1,5 @@
+#include <queue>
+
 #import <Foundation/Foundation.h>
 
 #include <node_buffer.h>
@@ -8,18 +10,22 @@
 using namespace v8;
 using v8::FunctionTemplate;
 
-
 static v8::Persistent<v8::FunctionTemplate> s_ct;
 
+
 class XpcEventData {
-public:
-  XpcConnection *xpcConnnection;
-  xpc_object_t event;
+  public:
+    XpcConnection *xpcConnnection;
+    xpc_object_t event;
 };
 
+static uv_mutex_t queueMutex;
+static std::queue<XpcEventData> queue;
 
 void XpcConnection::Init(v8::Handle<v8::Object> target) {
   NanScope();
+
+  uv_mutex_init(&queueMutex);
 
   v8::Local<v8::FunctionTemplate> t = NanNew<v8::FunctionTemplate>(XpcConnection::New);
 
@@ -31,8 +37,6 @@ void XpcConnection::Init(v8::Handle<v8::Object> target) {
 
   NODE_SET_PROTOTYPE_METHOD(NanNew(s_ct), "setup", XpcConnection::Setup);
   NODE_SET_PROTOTYPE_METHOD(NanNew(s_ct), "sendMessage", XpcConnection::SendMessage);
-
-
 
   target->Set(NanNew("XpcConnection"), NanNew(s_ct)->GetFunction());
 }
@@ -49,6 +53,8 @@ void XpcConnection::setup() {
   this->dispatchQueue = dispatch_queue_create(this->serviceName.c_str(), 0);
   this->xpcConnnection = xpc_connection_create_mach_service(this->serviceName.c_str(), this->dispatchQueue, XPC_CONNECTION_MACH_SERVICE_PRIVILEGED);
 
+  uv_async_init(uv_default_loop(), &this->asyncHandle, (uv_async_cb)XpcConnection::AsyncCallback);
+
   xpc_connection_set_event_handler(this->xpcConnnection, ^(xpc_object_t event) {
     xpc_retain(event);
     this->handleEvent(event);
@@ -62,16 +68,16 @@ void XpcConnection::sendMessage(xpc_object_t message) {
 }
 
 void XpcConnection::handleEvent(xpc_object_t event) {
-  uv_work_t *req = new uv_work_t();
+  XpcEventData data;
 
-  XpcEventData* data = new XpcEventData;
+  data.xpcConnnection = this;
+  data.event = event;
 
-  data->xpcConnnection = this;
-  data->event = event;
+  uv_mutex_lock(&queueMutex);
+  queue.push(data);
+  uv_mutex_unlock(&queueMutex);
 
-  req->data = data;
-
-  uv_queue_work(uv_default_loop(), req, XpcConnection::HandleEvent, (uv_after_work_cb)XpcConnection::HandleEventAfter);
+  uv_async_send(&this->asyncHandle);
 }
 
 NAN_METHOD(XpcConnection::New) {
@@ -88,7 +94,7 @@ NAN_METHOD(XpcConnection::New) {
     }
   }
 
-  class XpcConnection* p = new class XpcConnection(serviceName);
+  XpcConnection* p = new XpcConnection(serviceName);
   p->Wrap(args.This());
   NanAssignPersistent(p->This, args.This());
   NanReturnValue(args.This());
@@ -250,50 +256,49 @@ v8::Handle<v8::Array> XpcConnection::XpcArrayToArray(xpc_object_t xpcArray) {
   return array;
 }
 
-void XpcConnection::HandleEvent(uv_work_t* req) {
-  // no-op
-}
+void XpcConnection::AsyncCallback(uv_async_t* handle) {
+  uv_mutex_lock(&queueMutex);
 
-#if UV_VERSION_MINOR > 8
-void XpcConnection::HandleEventAfter(uv_work_t* req, int status) {
-#else
-void XpcConnection::HandleEventAfter(uv_work_t* req) {
-#endif
   NanScope();
-  XpcEventData* data = static_cast<XpcEventData*>(req->data);
-  XpcConnection::XpcConnection *xpcConnnection = data->xpcConnnection;
-  xpc_object_t event = data->event;
 
-  xpc_type_t eventType = xpc_get_type(event);
-  if (eventType == XPC_TYPE_ERROR) {
-    const char* message = "unknown";
+  while (!queue.empty()) {
+    XpcEventData data = queue.front();
+    queue.pop();
 
-    if (event == XPC_ERROR_CONNECTION_INTERRUPTED) {
-      message = "connection interrupted";
-    } else if (event == XPC_ERROR_CONNECTION_INVALID) {
-      message = "connection invalid";
+    XpcConnection *xpcConnnection = data.xpcConnnection;
+    xpc_object_t event = data.event;
+
+    xpc_type_t eventType = xpc_get_type(event);
+    if (eventType == XPC_TYPE_ERROR) {
+      const char* message = "unknown";
+
+      if (event == XPC_ERROR_CONNECTION_INTERRUPTED) {
+        message = "connection interrupted";
+      } else if (event == XPC_ERROR_CONNECTION_INVALID) {
+        message = "connection invalid";
+      }
+
+      v8::Handle<v8::Value> argv[2] = {
+        NanNew<String>("error"),
+        NanNew<String>(message)
+      };
+
+      NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
+    } else if (eventType == XPC_TYPE_DICTIONARY) {
+      v8::Handle<v8::Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
+
+      v8::Handle<v8::Value> argv[2] = {
+        NanNew<String>("event"),
+        eventObject
+      };
+
+      NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
     }
 
-    v8::Handle<v8::Value> argv[2] = {
-      NanNew<String>("error"),
-      NanNew<String>(message)
-    };
-
-    NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
-  } else if (eventType == XPC_TYPE_DICTIONARY) {
-    v8::Handle<v8::Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
-
-    v8::Handle<v8::Value> argv[2] = {
-      NanNew<String>("event"),
-      eventObject
-    };
-
-    NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
+    xpc_release(event);
   }
 
-  xpc_release(event);
-  delete data;
-  delete req;
+  uv_mutex_unlock(&queueMutex);
 }
 
 NAN_METHOD(XpcConnection::SendMessage) {
