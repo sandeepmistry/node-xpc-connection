@@ -12,20 +12,8 @@ using v8::FunctionTemplate;
 
 static v8::Persistent<v8::FunctionTemplate> s_ct;
 
-
-class XpcEventData {
-  public:
-    XpcConnection *xpcConnnection;
-    xpc_object_t event;
-};
-
-static uv_mutex_t queueMutex;
-static std::queue<XpcEventData> queue;
-
 void XpcConnection::Init(v8::Handle<v8::Object> target) {
   NanScope();
-
-  uv_mutex_init(&queueMutex);
 
   v8::Local<v8::FunctionTemplate> t = NanNew<v8::FunctionTemplate>(XpcConnection::New);
 
@@ -44,20 +32,24 @@ void XpcConnection::Init(v8::Handle<v8::Object> target) {
 XpcConnection::XpcConnection(std::string serviceName) :
   node::ObjectWrap(),
   serviceName(serviceName) {
+
+  uv_async_init(uv_default_loop(), &this->asyncHandle, (uv_async_cb)XpcConnection::AsyncCallback);
+  uv_mutex_init(&this->eventQueueMutex);
+
+  this->asyncHandle.data = this;
 }
 
 XpcConnection::~XpcConnection() {
+  uv_mutex_destroy(&this->eventQueueMutex);
 }
 
 void XpcConnection::setup() {
   this->dispatchQueue = dispatch_queue_create(this->serviceName.c_str(), 0);
   this->xpcConnnection = xpc_connection_create_mach_service(this->serviceName.c_str(), this->dispatchQueue, XPC_CONNECTION_MACH_SERVICE_PRIVILEGED);
 
-  uv_async_init(uv_default_loop(), &this->asyncHandle, (uv_async_cb)XpcConnection::AsyncCallback);
-
   xpc_connection_set_event_handler(this->xpcConnnection, ^(xpc_object_t event) {
     xpc_retain(event);
-    this->handleEvent(event);
+    this->queueEvent(event);
   });
 
   xpc_connection_resume(this->xpcConnnection);
@@ -67,15 +59,11 @@ void XpcConnection::sendMessage(xpc_object_t message) {
   xpc_connection_send_message(this->xpcConnnection, message);
 }
 
-void XpcConnection::handleEvent(xpc_object_t event) {
-  XpcEventData data;
+void XpcConnection::queueEvent(xpc_object_t event) {
 
-  data.xpcConnnection = this;
-  data.event = event;
-
-  uv_mutex_lock(&queueMutex);
-  queue.push(data);
-  uv_mutex_unlock(&queueMutex);
+  uv_mutex_lock(&this->eventQueueMutex);
+  eventQueue.push(event);
+  uv_mutex_unlock(&eventQueueMutex);
 
   uv_async_send(&this->asyncHandle);
 }
@@ -257,16 +245,19 @@ v8::Handle<v8::Array> XpcConnection::XpcArrayToArray(xpc_object_t xpcArray) {
 }
 
 void XpcConnection::AsyncCallback(uv_async_t* handle) {
-  uv_mutex_lock(&queueMutex);
+  XpcConnection *xpcConnnection = (XpcConnection*)handle->data;
+
+  xpcConnnection->processEventQueue();
+}
+
+void XpcConnection::processEventQueue() {
+  uv_mutex_lock(&this->eventQueueMutex);
 
   NanScope();
 
-  while (!queue.empty()) {
-    XpcEventData data = queue.front();
-    queue.pop();
-
-    XpcConnection *xpcConnnection = data.xpcConnnection;
-    xpc_object_t event = data.event;
+  while (!this->eventQueue.empty()) {
+    xpc_object_t event = this->eventQueue.front();
+    this->eventQueue.pop();
 
     xpc_type_t eventType = xpc_get_type(event);
     if (eventType == XPC_TYPE_ERROR) {
@@ -283,7 +274,7 @@ void XpcConnection::AsyncCallback(uv_async_t* handle) {
         NanNew<String>(message)
       };
 
-      NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
+      NanMakeCallback(NanNew<v8::Object>(this->This), NanNew("emit"), 2, argv);
     } else if (eventType == XPC_TYPE_DICTIONARY) {
       v8::Handle<v8::Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
 
@@ -292,13 +283,13 @@ void XpcConnection::AsyncCallback(uv_async_t* handle) {
         eventObject
       };
 
-      NanMakeCallback(NanNew<v8::Object>(xpcConnnection->This), NanNew("emit"), 2, argv);
+      NanMakeCallback(NanNew<v8::Object>(this->This), NanNew("emit"), 2, argv);
     }
 
     xpc_release(event);
   }
 
-  uv_mutex_unlock(&queueMutex);
+  uv_mutex_unlock(&this->eventQueueMutex);
 }
 
 NAN_METHOD(XpcConnection::SendMessage) {

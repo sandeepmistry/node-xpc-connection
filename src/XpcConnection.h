@@ -35,7 +35,8 @@ private:
 
   void setup();
   void sendMessage(xpc_object_t message);
-  void handleEvent(xpc_object_t event);
+  void queueEvent(xpc_object_t event);
+  void processEventQueue();
 
 private:
   std::string serviceName;
@@ -45,6 +46,8 @@ private:
   v8::Persistent<v8::Object> This;
 
   uv_async_t asyncHandle;
+  uv_mutex_t eventQueueMutex;
+  std::queue<xpc_object_t> eventQueue;
 };
 
 #endif
