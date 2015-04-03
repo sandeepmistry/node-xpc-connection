@@ -33,13 +33,17 @@ XpcConnection::XpcConnection(std::string serviceName) :
   node::ObjectWrap(),
   serviceName(serviceName) {
 
-  uv_async_init(uv_default_loop(), &this->asyncHandle, (uv_async_cb)XpcConnection::AsyncCallback);
+  this->asyncHandle = new uv_async_t;
+
+  uv_async_init(uv_default_loop(), this->asyncHandle, (uv_async_cb)XpcConnection::AsyncCallback);
   uv_mutex_init(&this->eventQueueMutex);
 
-  this->asyncHandle.data = this;
+  this->asyncHandle->data = this;
 }
 
 XpcConnection::~XpcConnection() {
+  uv_close((uv_handle_t*)this->asyncHandle, (uv_close_cb)XpcConnection::AsyncCloseCallback);
+
   uv_mutex_destroy(&this->eventQueueMutex);
 }
 
@@ -65,7 +69,7 @@ void XpcConnection::queueEvent(xpc_object_t event) {
   eventQueue.push(event);
   uv_mutex_unlock(&eventQueueMutex);
 
-  uv_async_send(&this->asyncHandle);
+  uv_async_send(this->asyncHandle);
 }
 
 NAN_METHOD(XpcConnection::New) {
@@ -248,6 +252,10 @@ void XpcConnection::AsyncCallback(uv_async_t* handle) {
   XpcConnection *xpcConnnection = (XpcConnection*)handle->data;
 
   xpcConnnection->processEventQueue();
+}
+
+void XpcConnection::AsyncCloseCallback(uv_async_t* handle) {
+  delete handle;
 }
 
 void XpcConnection::processEventQueue() {

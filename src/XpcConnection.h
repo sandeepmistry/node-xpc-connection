@@ -32,6 +32,7 @@ private:
   static v8::Handle<v8::Array> XpcArrayToArray(xpc_object_t xpcArray);
 
   static void AsyncCallback(uv_async_t* handle);
+  static void AsyncCloseCallback(uv_async_t* handle);
 
   void setup();
   void sendMessage(xpc_object_t message);
@@ -45,7 +46,7 @@ private:
 
   v8::Persistent<v8::Object> This;
 
-  uv_async_t asyncHandle;
+  uv_async_t* asyncHandle;
   uv_mutex_t eventQueueMutex;
   std::queue<xpc_object_t> eventQueue;
 };
