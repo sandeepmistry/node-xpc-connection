@@ -8,25 +8,22 @@
 #include <nan.h>
 
 using namespace v8;
-using v8::FunctionTemplate;
 
-static v8::Persistent<v8::FunctionTemplate> s_ct;
+Nan::Persistent<FunctionTemplate> XpcConnection::constructor_template;
 
-void XpcConnection::Init(v8::Handle<v8::Object> target) {
-  NanScope();
+NAN_MODULE_INIT(XpcConnection::Init) {
+  Nan::HandleScope scope;
 
-  v8::Local<v8::FunctionTemplate> t = NanNew<v8::FunctionTemplate>(XpcConnection::New);
+  Local<FunctionTemplate> tmpl = Nan::New<FunctionTemplate>(New);
+  constructor_template.Reset(tmpl);
 
-  NanAssignPersistent(s_ct, t);
+  tmpl->InstanceTemplate()->SetInternalFieldCount(1);
+  tmpl->SetClassName(Nan::New("XpcConnection").ToLocalChecked());
 
-  NanNew(s_ct)->SetClassName(NanNew("XpcConnection"));
+  Nan::SetPrototypeMethod(tmpl, "setup", Setup);
+  Nan::SetPrototypeMethod(tmpl, "sendMessage", SendMessage);
 
-  NanNew(s_ct)->InstanceTemplate()->SetInternalFieldCount(1);
-
-  NODE_SET_PROTOTYPE_METHOD(NanNew(s_ct), "setup", XpcConnection::Setup);
-  NODE_SET_PROTOTYPE_METHOD(NanNew(s_ct), "sendMessage", XpcConnection::SendMessage);
-
-  target->Set(NanNew("XpcConnection"), NanNew(s_ct)->GetFunction());
+  target->Set(Nan::New("XpcConnection").ToLocalChecked(), tmpl->GetFunction());
 }
 
 XpcConnection::XpcConnection(std::string serviceName) :
@@ -73,54 +70,49 @@ void XpcConnection::queueEvent(xpc_object_t event) {
 }
 
 NAN_METHOD(XpcConnection::New) {
-  NanScope();
+  Nan::HandleScope scope;
   std::string serviceName = "";
 
-  if (args.Length() > 0) {
-    v8::Handle<v8::Value> arg0 = args[0];
-    if (arg0->IsString()) {
-      v8::Handle<v8::String> arg0String = arg0->ToString();
-      NanAsciiString arg0StringValue(arg0String);
+  if (info.Length() > 0 && info[0]->IsString()) {
+    Nan::Utf8String arg0(info[0]);
 
-      serviceName = *arg0StringValue;
-    }
+    serviceName = *arg0;
   }
 
   XpcConnection* p = new XpcConnection(serviceName);
-  p->Wrap(args.This());
-  NanAssignPersistent(p->This, args.This());
-  NanReturnValue(args.This());
-
+  p->Wrap(info.This());
+  p->This.Reset(info.This());
+  info.GetReturnValue().Set(info.This());
 }
 
 
 NAN_METHOD(XpcConnection::Setup) {
-  NanScope();
-  XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(args.This());
+  Nan::HandleScope scope;
+
+  XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(info.This());
 
   p->setup();
 
-  NanReturnValue (NanUndefined());
+  info.GetReturnValue().SetUndefined();
 }
 
-xpc_object_t XpcConnection::ValueToXpcObject(v8::Handle<v8::Value> value) {
+xpc_object_t XpcConnection::ValueToXpcObject(Local<Value> value) {
   xpc_object_t xpcObject = NULL;
 
   if (value->IsInt32() || value->IsUint32()) {
     xpcObject = xpc_int64_create(value->IntegerValue());
   } else if (value->IsString()) {
-    v8::Handle<v8::String> valueString = value->ToString();
-    NanAsciiString valueStringValue(valueString);
+    Nan::Utf8String valueString(value);
 
-    xpcObject = xpc_string_create(*valueStringValue);
+    xpcObject = xpc_string_create(*valueString);
   } else if (value->IsArray()) {
-    v8::Handle<v8::Array> valueArray = v8::Handle<v8::Array>::Cast(value);
+    Local<Array> valueArray = Local<Array>::Cast(value);
 
     xpcObject = XpcConnection::ArrayToXpcObject(valueArray);
   } else if (node::Buffer::HasInstance(value)) {
-    v8::Handle<v8::Object> valueObject = value->ToObject();
+    Local<Object> valueObject = value->ToObject();
 
-    if (valueObject->HasRealNamedProperty(NanNew<String>("isUuid"))) {
+    if (valueObject->HasRealNamedProperty(Nan::New("isUuid").ToLocalChecked())) {
       uuid_t *uuid = (uuid_t *)node::Buffer::Data(valueObject);
 
       xpcObject = xpc_uuid_create(*uuid);
@@ -128,7 +120,7 @@ xpc_object_t XpcConnection::ValueToXpcObject(v8::Handle<v8::Value> value) {
       xpcObject = xpc_data_create(node::Buffer::Data(valueObject), node::Buffer::Length(valueObject));
     }
   } else if (value->IsObject()) {
-    v8::Handle<v8::Object> valueObject = value->ToObject();
+    Local<Object> valueObject = value->ToObject();
 
     xpcObject = XpcConnection::ObjectToXpcObject(valueObject);
   } else {
@@ -137,21 +129,21 @@ xpc_object_t XpcConnection::ValueToXpcObject(v8::Handle<v8::Value> value) {
   return xpcObject;
 }
 
-xpc_object_t XpcConnection::ObjectToXpcObject(v8::Handle<v8::Object> object) {
+xpc_object_t XpcConnection::ObjectToXpcObject(Local<Object> object) {
   xpc_object_t xpcObject = xpc_dictionary_create(NULL, NULL, 0);
 
-  v8::Handle<v8::Array> propertyNames = object->GetPropertyNames();
+  Local<Array> propertyNames = object->GetPropertyNames();
 
   for(uint32_t i = 0; i < propertyNames->Length(); i++) {
-    v8::Handle<v8::Value> propertyName = propertyNames->Get(i);
+    Local<Value> propertyName = propertyNames->Get(i);
 
     if (propertyName->IsString()) {
-      v8::Handle<v8::String> propertyNameString = propertyName->ToString();
-      NanAsciiString propertyNameStringValue(propertyNameString);
-      v8::Handle<v8::Value> propertyValue = object->GetRealNamedProperty(propertyNameString);
+      Nan::Utf8String propertyNameString(propertyName);
+
+      Local<Value> propertyValue = object->GetRealNamedProperty(propertyName->ToString());
 
       xpc_object_t xpcValue = XpcConnection::ValueToXpcObject(propertyValue);
-      xpc_dictionary_set_value(xpcObject, *propertyNameStringValue, xpcValue);
+      xpc_dictionary_set_value(xpcObject, *propertyNameString, xpcValue);
       if (xpcValue) {
         xpc_release(xpcValue);
       }
@@ -161,11 +153,11 @@ xpc_object_t XpcConnection::ObjectToXpcObject(v8::Handle<v8::Object> object) {
   return xpcObject;
 }
 
-xpc_object_t XpcConnection::ArrayToXpcObject(v8::Handle<v8::Array> array) {
+xpc_object_t XpcConnection::ArrayToXpcObject(Local<Array> array) {
   xpc_object_t xpcArray = xpc_array_create(NULL, 0);
 
   for(uint32_t i = 0; i < array->Length(); i++) {
-    v8::Handle<v8::Value> value = array->Get(i);
+    Local<Value> value = array->Get(i);
 
     xpc_object_t xpcValue = XpcConnection::ValueToXpcObject(value);
     xpc_array_append_value(xpcArray, xpcValue);
@@ -177,46 +169,23 @@ xpc_object_t XpcConnection::ArrayToXpcObject(v8::Handle<v8::Array> array) {
   return xpcArray;
 }
 
-v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
-  v8::Handle<v8::Value> value;
+Local<Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
+  Local<Value> value;
 
   xpc_type_t valueType = xpc_get_type(xpcObject);
 
   if (valueType == XPC_TYPE_INT64) {
-    value = NanNew<Integer>((int32_t)xpc_int64_get_value(xpcObject));
+    value = Nan::New((int32_t)xpc_int64_get_value(xpcObject));
   } else if(valueType == XPC_TYPE_STRING) {
-    value = NanNew<String>(xpc_string_get_string_ptr(xpcObject));
+    value = Nan::New(xpc_string_get_string_ptr(xpcObject)).ToLocalChecked();
   } else if(valueType == XPC_TYPE_DICTIONARY) {
     value = XpcConnection::XpcDictionaryToObject(xpcObject);
   } else if(valueType == XPC_TYPE_ARRAY) {
     value = XpcConnection::XpcArrayToArray(xpcObject);
   } else if(valueType == XPC_TYPE_DATA) {
-
-
-    Local<Object> slowBuffer = NanNewBufferHandle((char *)xpc_data_get_bytes_ptr(xpcObject), xpc_data_get_length(xpcObject));
-    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global();
-    v8::Handle<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(NanNew<String>("Buffer")));
-
-    v8::Handle<v8::Value> constructorArgs[3] = {
-      slowBuffer,
-      NanNew<Integer>((int32_t)xpc_data_get_length(xpcObject)),
-      NanNew<Integer>(0)
-    };
-
-    value = bufferConstructor->NewInstance(3, constructorArgs);
+    value = Nan::CopyBuffer((char *)xpc_data_get_bytes_ptr(xpcObject), xpc_data_get_length(xpcObject)).ToLocalChecked();
   } else if(valueType == XPC_TYPE_UUID) {
-    Local<Object> slowBuffer = NanNewBufferHandle((char *)xpc_uuid_get_bytes(xpcObject), sizeof(uuid_t));
-
-    v8::Handle<v8::Object> globalObj = NanGetCurrentContext()->Global();
-    v8::Handle<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(NanNew<String>("Buffer")));
-
-    v8::Handle<v8::Value> constructorArgs[3] = {
-      slowBuffer,
-      NanNew<Integer>((int32_t)sizeof(uuid_t)),
-      NanNew<Integer>(0)
-    };
-
-    value = bufferConstructor->NewInstance(3, constructorArgs);
+    value = Nan::CopyBuffer((char *)xpc_uuid_get_bytes(xpcObject), sizeof(uuid_t)).ToLocalChecked();
   } else {
     NSLog(@"XpcObjectToValue: Could not convert to value!, %@", xpcObject);
   }
@@ -224,11 +193,11 @@ v8::Handle<v8::Value> XpcConnection::XpcObjectToValue(xpc_object_t xpcObject) {
   return value;
 }
 
-v8::Handle<v8::Object> XpcConnection::XpcDictionaryToObject(xpc_object_t xpcDictionary) {
-  v8::Handle<v8::Object> object = NanNew<Object>();
+Local<Object> XpcConnection::XpcDictionaryToObject(xpc_object_t xpcDictionary) {
+  Local<Object> object = Nan::New<Object>();
 
   xpc_dictionary_apply(xpcDictionary, ^bool(const char *key, xpc_object_t value) {
-    object->Set(NanNew<String>(key), XpcConnection::XpcObjectToValue(value));
+    object->Set(Nan::New<String>(key).ToLocalChecked(), XpcConnection::XpcObjectToValue(value));
 
     return true;
   });
@@ -236,11 +205,11 @@ v8::Handle<v8::Object> XpcConnection::XpcDictionaryToObject(xpc_object_t xpcDict
   return object;
 }
 
-v8::Handle<v8::Array> XpcConnection::XpcArrayToArray(xpc_object_t xpcArray) {
-  v8::Handle<v8::Array> array = NanNew<Array>();
+Local<Array> XpcConnection::XpcArrayToArray(xpc_object_t xpcArray) {
+  Local<Array> array = Nan::New<Array>();
 
   xpc_array_apply(xpcArray, ^bool(size_t index, xpc_object_t value) {
-    array->Set(NanNew<Number>(index), XpcConnection::XpcObjectToValue(value));
+    array->Set(Nan::New<Number>(index), XpcConnection::XpcObjectToValue(value));
 
     return true;
   });
@@ -261,7 +230,7 @@ void XpcConnection::AsyncCloseCallback(uv_async_t* handle) {
 void XpcConnection::processEventQueue() {
   uv_mutex_lock(&this->eventQueueMutex);
 
-  NanScope();
+  Nan::HandleScope scope;
 
   while (!this->eventQueue.empty()) {
     xpc_object_t event = this->eventQueue.front();
@@ -277,21 +246,21 @@ void XpcConnection::processEventQueue() {
         message = "connection invalid";
       }
 
-      v8::Handle<v8::Value> argv[2] = {
-        NanNew<String>("error"),
-        NanNew<String>(message)
+      Local<Value> argv[2] = {
+        Nan::New("error").ToLocalChecked(),
+        Nan::New(message).ToLocalChecked()
       };
 
-      NanMakeCallback(NanNew<v8::Object>(this->This), NanNew("emit"), 2, argv);
+      Nan::MakeCallback(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
     } else if (eventType == XPC_TYPE_DICTIONARY) {
-      v8::Handle<v8::Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
+      Local<Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
 
-      v8::Handle<v8::Value> argv[2] = {
-        NanNew<String>("event"),
+      Local<Value> argv[2] = {
+        Nan::New("event").ToLocalChecked(),
         eventObject
       };
 
-      NanMakeCallback(NanNew<v8::Object>(this->This), NanNew("emit"), 2, argv);
+      Nan::MakeCallback(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
     }
 
     xpc_release(event);
@@ -301,13 +270,13 @@ void XpcConnection::processEventQueue() {
 }
 
 NAN_METHOD(XpcConnection::SendMessage) {
-  NanScope();
-  XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(args.This());
+  Nan::HandleScope scope;
+  XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(info.This());
 
-  if (args.Length() > 0) {
-    v8::Handle<v8::Value> arg0 = args[0];
+  if (info.Length() > 0) {
+    Local<Value> arg0 = info[0];
     if (arg0->IsObject()) {
-      v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(arg0);
+      Local<Object> object = Local<Object>::Cast(arg0);
 
       xpc_object_t message = XpcConnection::ObjectToXpcObject(object);
       p->sendMessage(message);
@@ -315,14 +284,7 @@ NAN_METHOD(XpcConnection::SendMessage) {
     }
   }
 
-  NanReturnValue (NanUndefined());
+  info.GetReturnValue().SetUndefined();
 }
 
-extern "C" {
-
-  static void init (v8::Handle<v8::Object> target) {
-    XpcConnection::Init(target);
-  }
-
-  NODE_MODULE(binding, init);
-}
+NODE_MODULE(binding, XpcConnection::Init);
