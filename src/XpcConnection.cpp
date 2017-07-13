@@ -22,6 +22,7 @@ NAN_MODULE_INIT(XpcConnection::Init) {
 
   Nan::SetPrototypeMethod(tmpl, "setup", Setup);
   Nan::SetPrototypeMethod(tmpl, "sendMessage", SendMessage);
+  Nan::SetPrototypeMethod(tmpl, "stop", Stop);
 
   target->Set(Nan::New("XpcConnection").ToLocalChecked(), tmpl->GetFunction());
 }
@@ -54,6 +55,10 @@ void XpcConnection::setup() {
   });
 
   xpc_connection_resume(this->xpcConnnection);
+}
+
+void XpcConnection::stop() {
+  uv_close((uv_handle_t*)this->asyncHandle, (uv_close_cb)XpcConnection::AsyncCloseCallback);
 }
 
 void XpcConnection::sendMessage(xpc_object_t message) {
@@ -92,6 +97,17 @@ NAN_METHOD(XpcConnection::Setup) {
   XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(info.This());
 
   p->setup();
+
+  info.GetReturnValue().SetUndefined();
+}
+
+
+NAN_METHOD(XpcConnection::Stop) {
+  Nan::HandleScope scope;
+
+  XpcConnection* p = node::ObjectWrap::Unwrap<XpcConnection>(info.This());
+
+  p->stop();
 
   info.GetReturnValue().SetUndefined();
 }

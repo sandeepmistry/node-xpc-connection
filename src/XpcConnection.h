@@ -18,6 +18,7 @@ public:
   static NAN_METHOD(New);
   static NAN_METHOD(Setup);
   static NAN_METHOD(SendMessage);
+  static NAN_METHOD(Stop);
 
 private:
   XpcConnection(std::string serviceName);
@@ -38,6 +39,7 @@ private:
   void sendMessage(xpc_object_t message);
   void queueEvent(xpc_object_t event);
   void processEventQueue();
+  void stop();
 
 private:
   std::string serviceName;
