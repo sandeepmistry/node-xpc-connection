@@ -25,6 +25,7 @@
     "darwin"
   ],
   "dependencies": {
+    "bindings": "~1.3.0",
     "nan": "^2.4.0"
   }
 }
