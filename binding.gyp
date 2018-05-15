@@ -1,7 +1,7 @@
 {
   'targets': [
     {
-      'target_name': 'binding',
+      'target_name': 'xpc-connection',
       'conditions': [
         ['OS=="mac"', {
           'sources': [
