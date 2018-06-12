@@ -28,7 +28,8 @@ NAN_MODULE_INIT(XpcConnection::Init) {
 
 XpcConnection::XpcConnection(std::string serviceName) :
   node::ObjectWrap(),
-  serviceName(serviceName) {
+  serviceName(serviceName),
+  asyncResource("XpcConnection") {
 
   this->asyncHandle = new uv_async_t;
 
@@ -250,8 +251,8 @@ void XpcConnection::processEventQueue() {
         Nan::New("error").ToLocalChecked(),
         Nan::New(message).ToLocalChecked()
       };
-
-      Nan::MakeCallback(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
+      
+      this->asyncResource.runInAsyncScope(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
     } else if (eventType == XPC_TYPE_DICTIONARY) {
       Local<Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
 
@@ -260,7 +261,7 @@ void XpcConnection::processEventQueue() {
         eventObject
       };
 
-      Nan::MakeCallback(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
+      this->asyncResource.runInAsyncScope(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
     }
 
     xpc_release(event);
