@@ -1,6 +1,6 @@
 var events = require('events');
 
-var binding = require('./build/Release/binding.node');
+var binding = require('bindings')('xpc-connection.node');
 var XpcConnection = binding.XpcConnection;
 
 inherits(XpcConnection, events.EventEmitter);

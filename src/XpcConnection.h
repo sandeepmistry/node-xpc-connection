@@ -45,6 +45,7 @@ private:
   xpc_connection_t xpcConnnection;
 
   Nan::Persistent<v8::Object> This;
+  Nan::AsyncResource asyncResource;
 
   uv_async_t* asyncHandle;
   uv_mutex_t eventQueueMutex;
