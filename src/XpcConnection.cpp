@@ -23,7 +23,7 @@ NAN_MODULE_INIT(XpcConnection::Init) {
   Nan::SetPrototypeMethod(tmpl, "setup", Setup);
   Nan::SetPrototypeMethod(tmpl, "sendMessage", SendMessage);
 
-  target->Set(Nan::New("XpcConnection").ToLocalChecked(), tmpl->GetFunction());
+  Nan::Set(target, Nan::New("XpcConnection").ToLocalChecked(), Nan::GetFunction(tmpl).ToLocalChecked());
 }
 
 XpcConnection::XpcConnection(std::string serviceName) :
@@ -101,7 +101,7 @@ xpc_object_t XpcConnection::ValueToXpcObject(Local<Value> value) {
   xpc_object_t xpcObject = NULL;
 
   if (value->IsInt32() || value->IsUint32()) {
-    xpcObject = xpc_int64_create(value->IntegerValue());
+    xpcObject = xpc_int64_create(Nan::To<int64_t>(value).FromJust());
   } else if (value->IsString()) {
     Nan::Utf8String valueString(value);
 
@@ -111,9 +111,10 @@ xpc_object_t XpcConnection::ValueToXpcObject(Local<Value> value) {
 
     xpcObject = XpcConnection::ArrayToXpcObject(valueArray);
   } else if (node::Buffer::HasInstance(value)) {
-    Local<Object> valueObject = value->ToObject();
+    Local<Object> valueObject = Nan::To<Object>(value).ToLocalChecked();
 
-    if (valueObject->HasRealNamedProperty(Nan::New("isUuid").ToLocalChecked())) {
+
+    if (Nan::HasRealNamedProperty(valueObject, Nan::New("isUuid").ToLocalChecked()).FromJust()) {
       uuid_t *uuid = (uuid_t *)node::Buffer::Data(valueObject);
 
       xpcObject = xpc_uuid_create(*uuid);
@@ -121,7 +122,7 @@ xpc_object_t XpcConnection::ValueToXpcObject(Local<Value> value) {
       xpcObject = xpc_data_create(node::Buffer::Data(valueObject), node::Buffer::Length(valueObject));
     }
   } else if (value->IsObject()) {
-    Local<Object> valueObject = value->ToObject();
+    Local<Object> valueObject = Nan::To<Object>(value).ToLocalChecked();
 
     xpcObject = XpcConnection::ObjectToXpcObject(valueObject);
   } else {
@@ -133,15 +134,15 @@ xpc_object_t XpcConnection::ValueToXpcObject(Local<Value> value) {
 xpc_object_t XpcConnection::ObjectToXpcObject(Local<Object> object) {
   xpc_object_t xpcObject = xpc_dictionary_create(NULL, NULL, 0);
 
-  Local<Array> propertyNames = object->GetPropertyNames();
+  Local<Array> propertyNames = Nan::GetPropertyNames(object).ToLocalChecked();
 
   for(uint32_t i = 0; i < propertyNames->Length(); i++) {
-    Local<Value> propertyName = propertyNames->Get(i);
+    Local<Value> propertyName = Nan::Get(propertyNames, i).ToLocalChecked();
 
     if (propertyName->IsString()) {
       Nan::Utf8String propertyNameString(propertyName);
 
-      Local<Value> propertyValue = Nan::GetRealNamedProperty(object, propertyName->ToString()).ToLocalChecked();
+      Local<Value> propertyValue = Nan::GetRealNamedProperty(object, Nan::To<String>(propertyName).ToLocalChecked()).ToLocalChecked();
 
       xpc_object_t xpcValue = XpcConnection::ValueToXpcObject(propertyValue);
       xpc_dictionary_set_value(xpcObject, *propertyNameString, xpcValue);
@@ -158,7 +159,7 @@ xpc_object_t XpcConnection::ArrayToXpcObject(Local<Array> array) {
   xpc_object_t xpcArray = xpc_array_create(NULL, 0);
 
   for(uint32_t i = 0; i < array->Length(); i++) {
-    Local<Value> value = array->Get(i);
+    Local<Value> value = Nan::Get(array, i).ToLocalChecked();
 
     xpc_object_t xpcValue = XpcConnection::ValueToXpcObject(value);
     xpc_array_append_value(xpcArray, xpcValue);
@@ -198,7 +199,7 @@ Local<Object> XpcConnection::XpcDictionaryToObject(xpc_object_t xpcDictionary) {
   Local<Object> object = Nan::New<Object>();
 
   xpc_dictionary_apply(xpcDictionary, ^bool(const char *key, xpc_object_t value) {
-    object->Set(Nan::New<String>(key).ToLocalChecked(), XpcConnection::XpcObjectToValue(value));
+    Nan::Set(object, Nan::New<String>(key).ToLocalChecked(), XpcConnection::XpcObjectToValue(value));
 
     return true;
   });
@@ -210,7 +211,7 @@ Local<Array> XpcConnection::XpcArrayToArray(xpc_object_t xpcArray) {
   Local<Array> array = Nan::New<Array>();
 
   xpc_array_apply(xpcArray, ^bool(size_t index, xpc_object_t value) {
-    array->Set(Nan::New<Number>(index), XpcConnection::XpcObjectToValue(value));
+    Nan::Set(array, Nan::New<Number>(index), XpcConnection::XpcObjectToValue(value));
 
     return true;
   });
@@ -251,7 +252,7 @@ void XpcConnection::processEventQueue() {
         Nan::New("error").ToLocalChecked(),
         Nan::New(message).ToLocalChecked()
       };
-      
+
       this->asyncResource.runInAsyncScope(Nan::New<Object>(this->This), Nan::New("emit").ToLocalChecked(), 2, argv);
     } else if (eventType == XPC_TYPE_DICTIONARY) {
       Local<Object> eventObject = XpcConnection::XpcDictionaryToObject(event);
